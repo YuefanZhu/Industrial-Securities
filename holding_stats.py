@@ -1,13 +1,11 @@
-# 连接wind
-from WindPy import *
-w.start()
-w.isconnected()
-
+# -*- coding: utf-8 -*-
 from functools import reduce
 import pandas as pd
 import numpy as np
 import os
-
+# 连接wind
+from WindPy import *
+w.start()
 # 连接通联账号
 import uqer
 from uqer import DataAPI
@@ -27,22 +25,24 @@ MVSummary = pd.DataFrame(index=['<100', '100-150', '150-200', '200-250', '250-40
 Summary = pd.DataFrame(index=[u'股票个数', u'仓位(%)', "PE(TTM)", "PB", u'市值(亿)', u'个股最大持仓(%)', u'个股持仓中位数(%)'])
 # 取通联的因子作为Index
 FactorIndex = DataAPI.RMFactorRetDayGet(tradeDate=date, field='').iloc[:, 1:40].columns
-FactorSummary = pd.DataFrame(index=FactorIndex)
+FactorSummary = pd.DataFrame(index=FactorIndex)  # Expo*Ret表
+FactorRetSummary = pd.DataFrame()  # 因子时间序列
+ExpoSummary = pd.DataFrame(index=FactorIndex)
 
 # 基金数据处理
 for U in range(0, l):
     date = filename.loc[U, 'filename'][-13:-5]
     data = pd.read_excel(path + "\\" + filename.loc[U, 'filename'], sheetname='Sheet1', header=2)
     filename.loc[U, 'Date'] = date
-    shstock = data.iloc[data[data[u'科目名称'] == u'上交所A股成本'].index[0] + 1:data[data[u'科目名称'] == u'上交所A股估值增值'].index[0] - 1,
+    shstock = data.loc[data[data[u'科目名称'] == u'上交所A股成本'].index[0] + 1:data[data[u'科目名称'] == u'上交所A股估值增值'].index[0] - 1,
               :]  # 取两个字符间的所有行，SH
     shstock['wind_code'] = shstock[u'科目代码'].apply(lambda x: x[-6:] + ".SH")
     shstock['secID'] = shstock[u'科目代码'].apply(lambda x: x[-6:] + ".XSHG")
-    szstock = data.iloc[data[data[u'科目名称'] == u'深交所A股成本'].index[0] + 1:data[data[u'科目名称'] == u'深交所A股估值增值'].index[0] - 1,
+    szstock = data.loc[data[data[u'科目名称'] == u'深交所A股成本'].index[0] + 1:data[data[u'科目名称'] == u'深交所A股估值增值'].index[0] - 1,
               :]  # 取两个字符间的所有行，SZ
     szstock['wind_code'] = szstock[u'科目代码'].apply(lambda x: x[-6:] + ".SZ")
     szstock['secID'] = szstock[u'科目代码'].apply(lambda x: x[-6:] + ".XSHE")
-    cystock = data.iloc[
+    cystock = data.loc[
               data[data[u'科目名称'] == u'深交所A股成本_创业板'].index[0] + 1:data[data[u'科目名称'] == u'深交所A股估值增值_创业板'].index[0] - 1,
               :]  # 取两个字符间的所有行，CYB
     cystock['wind_code'] = cystock[u'科目代码'].apply(lambda x: x[-6:] + ".SZ")
@@ -88,8 +88,8 @@ for U in range(0, l):
 
     # 基于风险模型归因
     factor_all = DataAPI.RMExposureDayGet(tradeDate=date, field='')
-    factor_ret = DataAPI.RMFactorRetDayGet(tradeDate=date, field='')
-    factor_ret = factor_ret.iloc[:, 1:40].T
+    factor_retraw = DataAPI.RMFactorRetDayGet(tradeDate=date, field='')
+    factor_ret = factor_retraw.iloc[:, 1:40].T
     factor = pd.DataFrame()
     factor['secID'] = stock['secID']
     factor['weight(%)'] = stock['weight(%)']
@@ -97,8 +97,11 @@ for U in range(0, l):
     expo = factor.iloc[:, -40:-1]
     weight = factor['weight(%)']
     factor_expo = pd.DataFrame(np.dot(weight, expo), index=expo.columns)
+    FactorSummary[date + 'FactorRet(%)'] = factor_ret
     FactorSummary[date + '(%)'] = factor_expo * factor_ret
-
+    ExpoSummary[date] = factor_expo
+    # ExpoSummary.to_excel(writer,'ExpoSummary'+date)
+    # ExpoSummary=ExpoSummary.append(factor)
     # 以中证500为基准
     zz500set = w.wset("sectorconstituent", "date=" + date + ";windcode=399905.SZ")
     zz500code = pd.DataFrame(zz500set.Data, index=zz500set.Fields).T
@@ -106,7 +109,7 @@ for U in range(0, l):
     temp = w.wss(wind_code, "mkt_cap_CSRC", "tradeDate=" + date + ";ruleType=3;industryType=1;unit=1")
     zz500data = pd.DataFrame(temp.Data, temp.Fields).T
     zz500data['wind_code'] = temp.Codes
-    # 中证500 归因
+    # 中证500归因
     factor_bench = pd.DataFrame()
     factor_bench['ticker'] = zz500data['wind_code'].apply(lambda x: x[:6])
     factor_bench['weight(%)'] = zz500data['MKT_CAP_CSRC'] / zz500data['MKT_CAP_CSRC'].sum() * 100
@@ -115,11 +118,11 @@ for U in range(0, l):
     weight = factor_bench['weight(%)']
     factor_expo = pd.DataFrame(np.dot(weight, expo), index=expo.columns)
     FactorSummary['zz500(%,' + date + ')'] = factor_expo * factor_ret
-
+    ExpoSummary['zz500(' + date + ')'] = factor_expo
     # print U
 
 # 中证500数据处理
-maxdate = filename['Date'].max()
+FactorRetSummary = DataAPI.RMFactorRetDayGet()  # Factor Return Summary, 从基金数据最早的日期开始至最新日期
 
 zz500set = w.wset("sectorconstituent", "date=" + maxdate + ";windcode=399905.SZ")
 zz500code = pd.DataFrame(zz500set.Data, index=zz500set.Fields).T
@@ -143,11 +146,12 @@ PESummary[u'中证500'] = zz500data.groupby('PE_TYPE')['MKT_CAP_CSRC'].sum() / z
 MVSummary[u'中证500'] = zz500data.groupby('MKT_CAP_TYPE')['MKT_CAP_CSRC'].sum() / zz500data['MKT_CAP_CSRC'].sum() * 100
 
 # 更换行名顺序
-
 writer = pd.ExcelWriter(write_file)
 Summary.to_excel(writer, 'Summary')
 PESummary.to_excel(writer, 'PESummary')
 MVSummary.to_excel(writer, 'MVSummary')
 IndustrySummary.to_excel(writer, 'IndustrySummary')
+ExpoSummary.to_excel(writer, 'ExpoSummary')
 FactorSummary.to_excel(writer, 'FactorSummary')
+FactorRetSummary.to_excel(writer, 'FactorRetSummary')
 writer.save()
