@@ -2,8 +2,7 @@
 # 本策略复制安信证券-20171016《风险再平衡-基于时序动量的大类资产配置策略》
 # ———————————————————————————————————————————————————————————
 import pandas as pd
-import numpy as np
-from scipy.stats import norm,t
+from scipy.stats import norm, t
 from WindPy import *
 w.start()
 # ———————————————————————————————————————————————————————————
