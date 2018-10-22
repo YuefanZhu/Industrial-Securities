@@ -158,8 +158,7 @@ net.plot()
 # ———————————————————————————————————————————————————————————
 # 策略评价部分
 perf = pd.DataFrame()
-perf['年化收益率'] = (net.iloc[-1,:]/net.iloc[0,:]-1)/(net.index[-1]-net.index[0]).days*365
-# 注意power用小数
+perf['年化收益率'] = (net.iloc[-1,:]/net.iloc[0,:]) ** (365./(net.index[-1]-net.index[0]).days) - 1
 perf['年化波动率'] = (net/net.shift(1)).std()*pow(252,0.5)
 perf['夏普比率'] = perf['年化收益率']/perf['年化波动率']
 # 计算各策略的动态回撤
